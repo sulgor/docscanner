@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a0a2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DocScanner">
+<meta name="description" content="Escáner de documentos personal con OCR y exportación PDF">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>DocScanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0d0618;
+  --bg2: #150d24;
+  --bg3: #1e1232;
+  --surface: #231740;
+  --accent: #c084fc;
+  --accent2: #818cf8;
+  --accent3: #34d399;
+  --text: #f1f0f7;
+  --text2: #a89fc4;
+  --text3: #6b618a;
+  --border: rgba(192,132,252,0.15);
+  --border2: rgba(192,132,252,0.3);
+  --font-mono: 'Space Mono', monospace;
+  --font-body: 'DM Sans', sans-serif;
+  --r: 12px;
+  --r2: 20px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: -40%;
+  left: -20%;
+  width: 80%;
+  height: 80%;
+  background: radial-gradient(ellipse, rgba(129,140,248,0.12) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  right: -20%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(ellipse, rgba(192,132,252,0.1) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* TOPBAR */
+.topbar {
+  position: relative;
+  z-index: 10;
+  padding: 14px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13,6,24,0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  flex-shrink: 0;
+}
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar-logo .icon-wrap {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fff;
+}
+.topbar-logo h1 {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+.badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
+/* TAB BAR */
+.tabbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  background: rgba(13,6,24,0.8);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1;
+  padding: 10px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 10px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+  position: relative;
+}
+.tab i { font-size: 20px; transition: transform 0.2s; }
+.tab.active { color: var(--accent); }
+.tab.active i { transform: scale(1.1); }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  border-radius: 2px 2px 0 0;
+}
+
+/* CONTENT */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.section { display: none; padding: 16px; flex-direction: column; gap: 14px; min-height: 100%; }
+.section.active { display: flex; }
+
+/* CARDS */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(192,132,252,0.3), transparent);
+}
+.card-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* PREVIEW AREA */
+.preview-area {
+  background: var(--bg3);
+  border: 1.5px dashed var(--border2);
+  border-radius: var(--r);
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, background 0.2s;
+}
+.preview-area:active { background: var(--surface); }
+.preview-area img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+}
+.preview-area.has-image .ph { display: none; }
+.ph { text-align: center; color: var(--text3); }
+.ph i { font-size: 44px; display: block; margin-bottom: 8px; color: var(--text3); }
+.ph p { font-size: 13px; line-height: 1.5; }
+.ph span { color: var(--accent); }
+
+/* BUTTONS */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: var(--r);
+  font-size: 14px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text);
+  transition: all 0.15s;
+  letter-spacing: 0.2px;
+}
+.btn:active { transform: scale(0.97); opacity: 0.85; }
+.btn i { font-size: 18px; }
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 100%);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(192,132,252,0.25);
+}
+.btn.full { width: 100%; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* SLIDERS */
+.slider-group { display: flex; flex-direction: column; gap: 14px; }
+.slider-item { display: flex; flex-direction: column; gap: 6px; }
+.slider-header { display: flex; justify-content: space-between; align-items: center; }
+.slider-label { font-size: 12px; color: var(--text2); font-weight: 500; }
+.slider-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(192,132,252,0.1);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--surface);
+  border-radius: 4px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(192,132,252,0.5);
+}
+
+/* MODE BUTTONS */
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode-btn {
+  padding: 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.mode-btn i { font-size: 16px; }
+.mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(192,132,252,0.08);
+}
+.mode-btn:active { transform: scale(0.96); }
+
+/* OCR OUTPUT */
+.ocr-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px;
+  font-size: 13px;
+  color: var(--text2);
+  min-height: 120px;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  -webkit-overflow-scrolling: touch;
+}
+.ocr-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ocr-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(52,211,153,0.1);
+  color: var(--accent3);
+  border: 1px solid rgba(52,211,153,0.2);
+}
+.ocr-status.analyzing {
+  background: rgba(192,132,252,0.1);
+  color: var(--accent);
+  border-color: var(--border2);
+}
+.ocr-status.error {
+  background: rgba(239,68,68,0.1);
+  color: #f87171;
+  border-color: rgba(239,68,68,0.2);
+}
+
+/* INPUT */
+.input-field {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input-field:focus { border-color: var(--accent); }
+
+/* STATUS */
+.status-msg { font-size: 12px; color: var(--text3); text-align: center; font-family: var(--font-mono); }
+.status-msg.ok { color: var(--accent3); }
+
+/* QUALITY */
+.quality-row { display: flex; gap: 8px; }
+.quality-btn {
+  flex: 1;
+  padding: 9px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text3);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.quality-btn.active {
+  border-color: var(--accent2);
+  color: var(--accent2);
+  background: rgba(129,140,248,0.08);
+}
+
+/* CANVAS hidden */
+canvas { display: none; }
+
+/* SCROLLBAR */
+.content::-webkit-scrollbar { width: 3px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* LOADING SPINNER */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+
+.divider { height: 1px; background: var(--border); margin: 4px 0; }
+.spacer { height: 20px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="icon-wrap"><i class="ti ti-scan"></i></div>
+    <h1>DocScanner</h1>
+  </div>
+  <span class="badge">PERSONAL</span>
+</div>
+
+<div class="tabbar">
+  <button class="tab active" onclick="showTab('scan')">
+    <i class="ti ti-camera"></i>Escanear
+  </button>
+  <button class="tab" onclick="showTab('adjust')">
+    <i class="ti ti-adjustments-horizontal"></i>Ajustar
+  </button>
+  <button class="tab" onclick="showTab('ocr')">
+    <i class="ti ti-text-recognition"></i>OCR
+  </button>
+  <button class="tab" onclick="showTab('export')">
+    <i class="ti ti-file-type-pdf"></i>PDF
+  </button>
+</div>
+
+<div class="content">
+
+  <!-- SCAN -->
+  <div class="section active" id="tab-scan">
+    <div class="card">
+      <div class="card-label">Documento</div>
+      <div class="preview-area" id="previewArea" onclick="document.getElementById('fileInput').click()">
+        <div class="ph">
+          <i class="ti ti-file-upload"></i>
+          <p>Toca para subir imagen<br><span>o usa la cámara</span></p>
+        </div>
+        <img id="previewImg" alt="Vista previa">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn full" onclick="document.getElementById('cameraInput').click()">
+        <i class="ti ti-camera"></i> Cámara
+      </button>
+      <button class="btn full" onclick="document.getElementById('fileInput').click()">
+        <i class="ti ti-photo"></i> Galería
+      </button>
+    </div>
+    <button class="btn primary full" onclick="goToAdjust()">
+      <i class="ti ti-wand"></i> Ajustar imagen
+    </button>
+    <div class="spacer"></div>
+    <input type="file" id="fileInput" accept="image/*" onchange="loadImage(this)" style="display:none">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="loadImage(this)" style="display:none">
+    <canvas id="mainCanvas"></canvas>
+  </div>
+
+  <!-- ADJUST -->
+  <div class="section" id="tab-adjust">
+    <div class="card">
+      <div class="card-label">Vista previa</div>
+      <div class="preview-area has-image" style="min-height:200px">
+        <img id="adjustPreview" alt="Ajuste" style="width:100%;height:200px;object-fit:contain">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Ajustes</div>
+      <div class="slider-group">
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label"><i class="ti ti-sun" style="font-size:14px;vertical-align:-2px"></i> Brillo</span>
+            <span class="slider-val" id="bVal">100</span>
+          </div>
+          <input type="range" id="brightness" min="50" max="200" value="100" oninput="applyFilters()">
+        </div>
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label"><i class="ti ti-circle-half-vertical" style="font-size:14px;vertical-align:-2px"></i> Contraste</span>
+            <span class="slider-val" id="cVal">100</span>
+          </div>
+          <input type="range" id="contrast" min="50" max="300" value="100" oninput="applyFilters()">
+        </div>
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label"><i class="ti ti-focus" style="font-size:14px;vertical-align:-2px"></i> Nitidez</span>
+            <span class="slider-val" id="sVal">0</span>
+          </div>
+          <input type="range" id="sharpen" min="0" max="10" value="0" oninput="applyFilters()">
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Modo</div>
+      <div class="mode-grid">
+        <button class="mode-btn active" id="mNormal" onclick="setMode('normal')"><i class="ti ti-photo"></i> Original</button>
+        <button class="mode-btn" id="mGray" onclick="setMode('gray')"><i class="ti ti-circle-half-2"></i> Gris</button>
+        <button class="mode-btn" id="mBw" onclick="setMode('bw')"><i class="ti ti-contrast"></i> B&N</button>
+        <button class="mode-btn" id="mMagic" onclick="setMode('magic')"><i class="ti ti-sparkles"></i> Auto</button>
+      </div>
+    </div>
+    <button class="btn primary full" onclick="showTab('ocr')">
+      <i class="ti ti-text-recognition"></i> Extraer texto
+    </button>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- OCR -->
+  <div class="section" id="tab-ocr">
+    <div class="card">
+      <div class="ocr-header">
+        <div class="card-label" style="margin:0">Texto extraído</div>
+        <span class="ocr-status" id="ocrBadge">LISTO</span>
+      </div>
+      <div class="ocr-box" id="ocrOutput">El texto del documento aparecerá aquí.</div>
+    </div>
+    <button class="btn primary full" onclick="runOCR()">
+      <i class="ti ti-wand"></i> Analizar con IA
+    </button>
+    <button class="btn full" onclick="copyText()">
+      <i class="ti ti-copy"></i> Copiar texto
+    </button>
+    <p class="status-msg" id="ocrStatus"></p>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- EXPORT -->
+  <div class="section" id="tab-export">
+    <div class="card">
+      <div class="card-label">Vista previa</div>
+      <div class="preview-area has-image" style="min-height:180px">
+        <img id="exportPreview" alt="Exportar" style="width:100%;height:180px;object-fit:contain">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Opciones</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div class="slider-label" style="margin-bottom:6px">Nombre del archivo</div>
+          <input type="text" id="fileName" value="documento_escaneado" class="input-field">
+        </div>
+        <div>
+          <div class="slider-label" style="margin-bottom:6px">Calidad</div>
+          <div class="quality-row">
+            <button class="quality-btn" id="qLow" onclick="setQuality('low')">BAJA</button>
+            <button class="quality-btn active" id="qMed" onclick="setQuality('med')">MEDIA</button>
+            <button class="quality-btn" id="qHigh" onclick="setQuality('high')">ALTA</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn primary full" onclick="exportPDF()">
+      <i class="ti ti-file-type-pdf"></i> Descargar PDF
+    </button>
+    <button class="btn full" onclick="exportImg()">
+      <i class="ti ti-photo-down"></i> Descargar imagen
+    </button>
+    <p class="status-msg" id="exportStatus"></p>
+    <div class="spacer"></div>
+  </div>
+
+</div>
+
+<script>
+let originalImage = null;
+let processedDataUrl = null;
+let currentMode = 'normal';
+let quality = 0.8;
+
+function showTab(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  const idx = ['scan','adjust','ocr','export'].indexOf(id);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  if (id === 'adjust' || id === 'export') syncPreviews();
+}
+
+function loadImage(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      originalImage = img;
+      const canvas = document.getElementById('mainCanvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      processedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      const prev = document.getElementById('previewImg');
+      prev.src = processedDataUrl;
+      prev.style.display = 'block';
+      document.getElementById('previewArea').classList.add('has-image');
+      syncPreviews();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function applyFilters() {
+  if (!originalImage) return;
+  const b = document.getElementById('brightness').value;
+  const c = document.getElementById('contrast').value;
+  const sh = document.getElementById('sharpen').value;
+  document.getElementById('bVal').textContent = b;
+  document.getElementById('cVal').textContent = c;
+  document.getElementById('sVal').textContent = sh;
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = originalImage.width;
+  canvas.height = originalImage.height;
+  ctx.filter = `brightness(${b}%) contrast(${c}%)`;
+  ctx.drawImage(originalImage, 0, 0);
+  ctx.filter = 'none';
+  if (currentMode === 'gray') {
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const g = d.data[i] * 0.299 + d.data[i+1] * 0.587 + d.data[i+2] * 0.114;
+      d.data[i] = d.data[i+1] = d.data[i+2] = g;
+    }
+    ctx.putImageData(d, 0, 0);
+  } else if (currentMode === 'bw') {
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const g = d.data[i] * 0.299 + d.data[i+1] * 0.587 + d.data[i+2] * 0.114;
+      d.data[i] = d.data[i+1] = d.data[i+2] = g > 128 ? 255 : 0;
+    }
+    ctx.putImageData(d, 0, 0);
+  } else if (currentMode === 'magic') {
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const g = d.data[i] * 0.299 + d.data[i+1] * 0.587 + d.data[i+2] * 0.114;
+      const enhanced = Math.min(255, Math.max(0, (g - 128) * 1.4 + 148));
+      d.data[i] = d.data[i+1] = d.data[i+2] = enhanced;
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+  processedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+  syncPreviews();
+}
+
+function setMode(m) {
+  currentMode = m;
+  ['Normal','Gray','Bw','Magic'].forEach(x => {
+    const btn = document.getElementById('m' + x);
+    if (btn) btn.classList.toggle('active', x.toLowerCase() === m);
+  });
+  applyFilters();
+}
+
+function syncPreviews() {
+  if (!processedDataUrl) return;
+  const ap = document.getElementById('adjustPreview');
+  const ep = document.getElementById('exportPreview');
+  if (ap) ap.src = processedDataUrl;
+  if (ep) ep.src = processedDataUrl;
+}
+
+function goToAdjust() {
+  if (!originalImage) { alert('Primero sube o captura una imagen.'); return; }
+  showTab('adjust');
+}
+
+function setQuality(q) {
+  quality = q === 'low' ? 0.5 : q === 'high' ? 0.97 : 0.8;
+  ['Low','Med','High'].forEach(x => {
+    const b = document.getElementById('q' + x);
+    if (b) b.classList.toggle('active', x.toLowerCase() === q);
+  });
+}
+
+async function runOCR() {
+  if (!processedDataUrl) { alert('Primero escanea un documento.'); return; }
+  const badge = document.getElementById('ocrBadge');
+  const output = document.getElementById('ocrOutput');
+  const status = document.getElementById('ocrStatus');
+  badge.textContent = 'ANALIZANDO...';
+  badge.className = 'ocr-status analyzing';
+  output.textContent = '';
+  status.textContent = '';
+  const base64 = processedDataUrl.split(',')[1];
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+            { type: 'text', text: 'Extrae todo el texto visible en esta imagen de documento. Devuelve SOLO el texto extraído, sin explicaciones, manteniendo el formato original con saltos de línea. Si no hay texto legible, escribe: [No se detectó texto legible]' }
+          ]
+        }]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.map(b => b.text || '').join('') || '[Sin resultado]';
+    output.textContent = text;
+    badge.textContent = '✓ LISTO';
+    badge.className = 'ocr-status';
+  } catch(e) {
+    output.textContent = '[Error al conectar]';
+    badge.textContent = 'ERROR';
+    badge.className = 'ocr-status error';
+    status.textContent = e.message;
+  }
+}
+
+function copyText() {
+  const t = document.getElementById('ocrOutput').textContent;
+  if (!t || t === 'El texto del documento aparecerá aquí.') { alert('Primero extrae el texto.'); return; }
+  navigator.clipboard.writeText(t).then(() => {
+    const s = document.getElementById('ocrStatus');
+    s.textContent = '✓ Copiado al portapapeles';
+    s.className = 'status-msg ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'status-msg'; }, 2500);
+  });
+}
+
+function exportPDF() {
+  if (!processedDataUrl) { alert('Primero escanea un documento.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const img = new Image();
+  img.onload = () => {
+    const pw = 190, ph = 277;
+    const ratio = Math.min(pw / img.width, ph / img.height);
+    const w = img.width * ratio, h = img.height * ratio;
+    const x = (210 - w) / 2, y = (297 - h) / 2;
+    pdf.addImage(processedDataUrl, 'JPEG', x, y, w, h, undefined, 'FAST');
+    const name = document.getElementById('fileName').value || 'documento';
+    pdf.save(name + '.pdf');
+    const s = document.getElementById('exportStatus');
+    s.textContent = '✓ PDF descargado';
+    s.className = 'status-msg ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'status-msg'; }, 3000);
+  };
+  img.src = processedDataUrl;
+}
+
+function exportImg() {
+  if (!processedDataUrl) { alert('Primero escanea un documento.'); return; }
+  const a = document.createElement('a');
+  const name = document.getElementById('fileName').value || 'documento';
+  a.href = processedDataUrl;
+  a.download = name + '.jpg';
+  a.click();
+  const s = document.getElementById('exportStatus');
+  s.textContent = '✓ Imagen descargada';
+  s.className = 'status-msg ok';
+  setTimeout(() => { s.textContent = ''; s.className = 'status-msg'; }, 3000);
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
