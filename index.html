@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0f07">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DocScanner">
+<meta name="description" content="Escáner de documentos personal con OCR y exportación PDF">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>DocScanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --bg:      #0a0f07;
+  --bg2:     #0f1509;
+  --bg3:     #141a0c;
+  --surface: #1c2412;
+  --s2:      #232d16;
+  --accent:  #6b7c3a;
+  --accent2: #8fa04a;
+  --accent3: #b5c76a;
+  --hi:      #d4e88a;
+  --text:    #e8edd8;
+  --text2:   #9faa80;
+  --text3:   #5a6340;
+  --border:  rgba(107,124,58,0.18);
+  --border2: rgba(107,124,58,0.35);
+  --white:   #f0f4e0;
+  --mono:    'IBM Plex Mono', monospace;
+  --body:    'IBM Plex Sans', sans-serif;
+  --r:       10px;
+  --r2:      16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--body);background:var(--bg);color:var(--text);display:flex;flex-direction:column;max-width:480px;margin:0 auto}
+
+/* noise texture overlay */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4}
+
+.topbar{position:relative;z-index:10;padding:13px 18px 11px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,15,7,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-icon{width:30px;height:30px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--accent3)}
+.logo h1{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:1px;color:var(--white);text-transform:uppercase}
+.badge{font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:20px;border:1px solid var(--border2);color:var(--accent2);letter-spacing:1px}
+
+.tabbar{position:relative;z-index:10;display:flex;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:9px 2px 7px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;background:none;border:none;color:var(--text3);font-size:9px;font-family:var(--mono);font-weight:400;letter-spacing:0.5px;text-transform:uppercase;transition:color 0.2s;position:relative}
+.tab i{font-size:18px;transition:transform 0.2s}
+.tab.active{color:var(--accent3)}
+.tab.active i{transform:scale(1.1)}
+.tab.active::after{content:'';position:absolute;bottom:0;left:15%;right:15%;height:2px;background:var(--accent2);border-radius:2px 2px 0 0}
+
+.content{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1;-webkit-overflow-scrolling:touch}
+.content::-webkit-scrollbar{width:2px}
+.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+.section{display:none;padding:14px;flex-direction:column;gap:12px;min-height:100%}
+.section.active{display:flex}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(181,199,106,0.2),transparent)}
+.clabel{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:11px}
+
+.preview-area{background:var(--bg3);border:1.5px dashed var(--border2);border-radius:var(--r);min-height:210px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;cursor:pointer;position:relative;overflow:hidden;transition:border-color 0.2s}
+.preview-area:active{background:var(--surface)}
+.preview-area img{width:100%;height:100%;object-fit:contain;position:absolute;inset:0;border-radius:var(--r)}
+.preview-area.has-image .ph{display:none}
+.ph{text-align:center;color:var(--text3)}
+.ph i{font-size:38px;display:block;margin-bottom:6px}
+.ph p{font-size:12px;line-height:1.6}
+.ph span{color:var(--accent3)}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 18px;border-radius:var(--r);font-size:13px;font-family:var(--body);font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text);transition:all 0.15s}
+.btn:active{transform:scale(0.97);opacity:0.8}
+.btn i{font-size:17px}
+.btn.primary{background:var(--surface);border-color:var(--accent2);color:var(--hi)}
+.btn.primary:active{background:var(--s2)}
+.btn.full{width:100%}
+.btn-row{display:flex;gap:9px}
+.btn-row .btn{flex:1}
+
+.slider-group{display:flex;flex-direction:column;gap:13px}
+.slider-item{display:flex;flex-direction:column;gap:5px}
+.sl-head{display:flex;justify-content:space-between;align-items:center}
+.sl-label{font-size:11px;color:var(--text2);font-weight:500;display:flex;align-items:center;gap:5px}
+.sl-label i{font-size:13px}
+.sl-val{font-family:var(--mono);font-size:10px;color:var(--accent3);background:rgba(107,124,58,0.15);padding:2px 6px;border-radius:5px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;background:var(--surface);border-radius:3px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent2);cursor:pointer;border:2px solid var(--bg)}
+
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.mode-btn{padding:9px 8px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);color:var(--text3);font-size:11px;font-family:var(--mono);cursor:pointer;text-align:center;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.mode-btn i{font-size:14px}
+.mode-btn.active{border-color:var(--accent2);color:var(--accent3);background:rgba(107,124,58,0.1)}
+.mode-btn:active{transform:scale(0.96)}
+
+.ocr-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:12px;color:var(--text2);min-height:110px;max-height:260px;overflow-y:auto;line-height:1.85;white-space:pre-wrap;font-family:var(--body);-webkit-overflow-scrolling:touch}
+.ocr-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.ocr-status{font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:20px;background:rgba(107,124,58,0.1);color:var(--accent2);border:1px solid var(--border2);letter-spacing:0.5px}
+.ocr-status.analyzing{color:var(--hi);border-color:rgba(181,199,106,0.3);background:rgba(181,199,106,0.07)}
+.ocr-status.error{color:#e57373;border-color:rgba(229,115,115,0.3);background:rgba(229,115,115,0.07)}
+
+.input-field{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text);font-size:13px;font-family:var(--body);outline:none;transition:border-color 0.2s}
+.input-field:focus{border-color:var(--accent2)}
+
+.qual-row{display:flex;gap:7px}
+.qual-btn{flex:1;padding:8px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);color:var(--text3);font-size:10px;font-family:var(--mono);cursor:pointer;text-align:center;transition:all 0.15s;letter-spacing:0.5px}
+.qual-btn.active{border-color:var(--accent2);color:var(--accent3);background:rgba(107,124,58,0.1)}
+
+/* HISTORY */
+.hist-item{display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:background 0.15s}
+.hist-item:active{background:var(--surface)}
+.hist-thumb{width:42px;height:42px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;background:var(--surface)}
+.hist-info{flex:1;min-width:0}
+.hist-name{font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-meta{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+.hist-del{padding:6px;color:var(--text3);cursor:pointer;font-size:16px;flex-shrink:0}
+.hist-del:active{color:#e57373}
+.hist-empty{text-align:center;color:var(--text3);font-size:12px;padding:30px 0;font-family:var(--mono)}
+.hist-empty i{font-size:32px;display:block;margin-bottom:8px;color:var(--border2)}
+
+/* PAGES STRIP */
+.pages-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.pages-strip::-webkit-scrollbar{display:none}
+.page-thumb{position:relative;flex-shrink:0;width:64px}
+.page-thumb img{width:64px;height:82px;object-fit:cover;border-radius:6px;border:1.5px solid var(--border);display:block}
+.page-thumb.active img{border-color:var(--accent3)}
+.page-num{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:9px;color:var(--white);background:rgba(0,0,0,0.6);border-radius:0 0 5px 5px;padding:1px 0}
+.page-del{position:absolute;top:-5px;right:-5px;width:16px;height:16px;background:#e57373;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;cursor:pointer;border:1px solid var(--bg)}
+
+.status-msg{font-size:11px;color:var(--text3);text-align:center;font-family:var(--mono)}
+.status-msg.ok{color:var(--accent3)}
+.divider{height:1px;background:var(--border);margin:2px 0}
+.spacer{height:16px}
+canvas{display:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon"><i class="ti ti-scan"></i></div>
+    <h1>DocScanner</h1>
+  </div>
+  <span class="badge">PERSONAL</span>
+</div>
+
+<div class="tabbar">
+  <button class="tab active" onclick="showTab('scan')"><i class="ti ti-camera"></i>Escanear</button>
+  <button class="tab" onclick="showTab('adjust')"><i class="ti ti-adjustments-horizontal"></i>Ajustar</button>
+  <button class="tab" onclick="showTab('ocr')"><i class="ti ti-text-recognition"></i>OCR</button>
+  <button class="tab" onclick="showTab('export')"><i class="ti ti-file-type-pdf"></i>PDF</button>
+  <button class="tab" onclick="showTab('history')"><i class="ti ti-clock"></i>Historial</button>
+</div>
+
+<div class="content">
+
+  <!-- SCAN -->
+  <div class="section active" id="tab-scan">
+    <div class="card">
+      <div class="clabel">Documento actual</div>
+      <div class="preview-area" id="previewArea" onclick="document.getElementById('fileInput').click()">
+        <div class="ph"><i class="ti ti-file-upload"></i><p>Toca para subir imagen<br><span>o usa la cámara</span></p></div>
+        <img id="previewImg" alt="Vista previa">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn full" onclick="document.getElementById('cameraInput').click()"><i class="ti ti-camera"></i>Cámara</button>
+      <button class="btn full" onclick="document.getElementById('fileInput').click()"><i class="ti ti-photo"></i>Galería</button>
+    </div>
+    <button class="btn full" onclick="addPage()" id="addPageBtn" style="display:none"><i class="ti ti-plus"></i>Añadir página</button>
+    <!-- PAGES STRIP -->
+    <div id="pagesCard" class="card" style="display:none">
+      <div class="clabel">Páginas del documento (<span id="pageCount">0</span>)</div>
+      <div class="pages-strip" id="pagesStrip"></div>
+    </div>
+    <button class="btn primary full" onclick="goToAdjust()"><i class="ti ti-wand"></i>Ajustar imagen</button>
+    <input type="file" id="fileInput" accept="image/*" onchange="loadImage(this)" style="display:none">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="loadImage(this)" style="display:none">
+    <canvas id="mainCanvas"></canvas>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ADJUST -->
+  <div class="section" id="tab-adjust">
+    <div class="card">
+      <div class="clabel">Vista previa</div>
+      <div class="preview-area has-image" style="min-height:190px">
+        <img id="adjustPreview" alt="Ajuste" style="width:100%;height:190px;object-fit:contain">
+      </div>
+    </div>
+    <div class="card">
+      <div class="clabel">Rotar</div>
+      <div class="btn-row">
+        <button class="btn full" onclick="rotateImg(-90)"><i class="ti ti-rotate-counterclockwise"></i>−90°</button>
+        <button class="btn full" onclick="rotateImg(180)"><i class="ti ti-rotate-clockwise-2"></i>180°</button>
+        <button class="btn full" onclick="rotateImg(90)"><i class="ti ti-rotate-clockwise"></i>+90°</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="clabel">Ajustes</div>
+      <div class="slider-group">
+        <div class="slider-item">
+          <div class="sl-head"><span class="sl-label"><i class="ti ti-sun"></i>Brillo</span><span class="sl-val" id="bVal">100</span></div>
+          <input type="range" id="brightness" min="50" max="200" value="100" oninput="applyFilters()">
+        </div>
+        <div class="slider-item">
+          <div class="sl-head"><span class="sl-label"><i class="ti ti-circle-half-vertical"></i>Contraste</span><span class="sl-val" id="cVal">100</span></div>
+          <input type="range" id="contrast" min="50" max="300" value="100" oninput="applyFilters()">
+        </div>
+        <div class="slider-item">
+          <div class="sl-head"><span class="sl-label"><i class="ti ti-focus"></i>Nitidez</span><span class="sl-val" id="sVal">0</span></div>
+          <input type="range" id="sharpen" min="0" max="10" value="0" oninput="applyFilters()">
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="clabel">Modo</div>
+      <div class="mode-grid">
+        <button class="mode-btn active" id="mNormal" onclick="setMode('normal')"><i class="ti ti-photo"></i>Original</button>
+        <button class="mode-btn" id="mGray" onclick="setMode('gray')"><i class="ti ti-circle-half-2"></i>Gris</button>
+        <button class="mode-btn" id="mBw" onclick="setMode('bw')"><i class="ti ti-contrast"></i>B&amp;N</button>
+        <button class="mode-btn" id="mMagic" onclick="setMode('magic')"><i class="ti ti-sparkles"></i>Auto</button>
+      </div>
+    </div>
+    <button class="btn primary full" onclick="saveAdjustAndGoOCR()"><i class="ti ti-check"></i>Guardar ajustes</button>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- OCR -->
+  <div class="section" id="tab-ocr">
+    <div class="card">
+      <div class="ocr-head">
+        <div class="clabel" style="margin:0">Texto extraído</div>
+        <span class="ocr-status" id="ocrBadge">LISTO</span>
+      </div>
+      <div class="ocr-box" id="ocrOutput">El texto del documento aparecerá aquí.</div>
+    </div>
+    <button class="btn primary full" onclick="runOCR()"><i class="ti ti-wand"></i>Analizar con IA</button>
+    <button class="btn full" onclick="copyText()"><i class="ti ti-copy"></i>Copiar texto</button>
+    <p class="status-msg" id="ocrStatus"></p>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- EXPORT -->
+  <div class="section" id="tab-export">
+    <div class="card">
+      <div class="clabel">Vista previa</div>
+      <div class="preview-area has-image" style="min-height:170px">
+        <img id="exportPreview" alt="Exportar" style="width:100%;height:170px;object-fit:contain">
+      </div>
+    </div>
+    <div class="card">
+      <div class="clabel" style="margin-bottom:10px">Páginas: <span id="exportPageCount" style="color:var(--accent3)">0</span></div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div>
+          <div class="sl-label" style="margin-bottom:5px;font-size:11px">Nombre del archivo</div>
+          <input type="text" id="fileName" value="documento_escaneado" class="input-field">
+        </div>
+        <div>
+          <div class="sl-label" style="margin-bottom:5px;font-size:11px">Calidad</div>
+          <div class="qual-row">
+            <button class="qual-btn" id="qLow" onclick="setQuality('low')">BAJA</button>
+            <button class="qual-btn active" id="qMed" onclick="setQuality('med')">MEDIA</button>
+            <button class="qual-btn" id="qHigh" onclick="setQuality('high')">ALTA</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn primary full" onclick="exportPDF()"><i class="ti ti-file-type-pdf"></i>Descargar PDF</button>
+    <button class="btn full" onclick="shareWhatsApp()"><i class="ti ti-brand-whatsapp"></i>Compartir por WhatsApp</button>
+    <button class="btn full" onclick="exportImg()"><i class="ti ti-photo-down"></i>Descargar imagen</button>
+    <p class="status-msg" id="exportStatus"></p>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="section" id="tab-history">
+    <div class="card">
+      <div class="clabel">Documentos guardados</div>
+      <div id="histList"><div class="hist-empty"><i class="ti ti-clock-off"></i>Sin documentos guardados</div></div>
+    </div>
+    <button class="btn full" onclick="clearHistory()" style="color:var(--text3)"><i class="ti ti-trash"></i>Borrar historial</button>
+    <div class="spacer"></div>
+  </div>
+
+</div>
+
+<script>
+let originalImage = null;
+let processedDataUrl = null;
+let currentMode = 'normal';
+let quality = 0.8;
+let rotation = 0;
+let pages = []; // [{dataUrl, name}]
+
+// ── IMAGE LOADING ──────────────────────────────────────────
+function loadImage(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      originalImage = img;
+      rotation = 0;
+      resetSliders();
+      renderToCanvas(img, 0, 100, 100);
+      processedDataUrl = document.getElementById('mainCanvas').toDataURL('image/jpeg', 0.95);
+      document.getElementById('previewImg').src = processedDataUrl;
+      document.getElementById('previewImg').style.display = 'block';
+      document.getElementById('previewArea').classList.add('has-image');
+      syncPreviews();
+      if (pages.length === 0) addPageAuto();
+      document.getElementById('addPageBtn').style.display = 'flex';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(input.files[0]);
+  input.value = '';
+}
+
+function resetSliders() {
+  document.getElementById('brightness').value = 100;
+  document.getElementById('contrast').value = 100;
+  document.getElementById('sharpen').value = 0;
+  document.getElementById('bVal').textContent = 100;
+  document.getElementById('cVal').textContent = 100;
+  document.getElementById('sVal').textContent = 0;
+  currentMode = 'normal';
+  ['Normal','Gray','Bw','Magic'].forEach(x => document.getElementById('m'+x)?.classList.toggle('active', x==='Normal'));
+}
+
+function renderToCanvas(img, rot, bright, cont) {
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  const rad = rot * Math.PI / 180;
+  const sw = Math.abs(Math.cos(rad)) * img.width + Math.abs(Math.sin(rad)) * img.height;
+  const sh = Math.abs(Math.sin(rad)) * img.width + Math.abs(Math.cos(rad)) * img.height;
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rad);
+  ctx.filter = `brightness(${bright}%) contrast(${cont}%)`;
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  ctx.restore();
+  ctx.filter = 'none';
+}
+
+// ── FILTERS ────────────────────────────────────────────────
+function applyFilters() {
+  if (!originalImage) return;
+  const b = +document.getElementById('brightness').value;
+  const c = +document.getElementById('contrast').value;
+  const sh = +document.getElementById('sharpen').value;
+  document.getElementById('bVal').textContent = b;
+  document.getElementById('cVal').textContent = c;
+  document.getElementById('sVal').textContent = sh;
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  renderToCanvas(originalImage, rotation, b, c);
+  if (currentMode !== 'normal') {
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const g = d.data[i]*0.299 + d.data[i+1]*0.587 + d.data[i+2]*0.114;
+      if (currentMode === 'gray') { d.data[i]=d.data[i+1]=d.data[i+2]=g; }
+      else if (currentMode === 'bw') { const v=g>128?255:0; d.data[i]=d.data[i+1]=d.data[i+2]=v; }
+      else if (currentMode === 'magic') { const v=Math.min(255,Math.max(0,(g-128)*1.45+150)); d.data[i]=d.data[i+1]=d.data[i+2]=v; }
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+  processedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+  syncPreviews();
+}
+
+function setMode(m) {
+  currentMode = m;
+  ['Normal','Gray','Bw','Magic'].forEach(x => {
+    document.getElementById('m'+x)?.classList.toggle('active', x.toLowerCase()===m);
+  });
+  applyFilters();
+}
+
+function rotateImg(deg) {
+  if (!originalImage) return;
+  rotation = ((rotation + deg) % 360 + 360) % 360;
+  applyFilters();
+}
+
+function syncPreviews() {
+  if (!processedDataUrl) return;
+  ['adjustPreview','exportPreview'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.src = processedDataUrl;
+  });
+  document.getElementById('exportPageCount').textContent = pages.length || (processedDataUrl ? 1 : 0);
+}
+
+function goToAdjust() {
+  if (!originalImage) { alert('Primero sube o captura una imagen.'); return; }
+  showTab('adjust');
+}
+
+// ── PAGES ──────────────────────────────────────────────────
+function addPageAuto() {
+  if (!processedDataUrl) return;
+  const existing = pages.findIndex(p => p.original === originalImage);
+  if (existing >= 0) { pages[existing].dataUrl = processedDataUrl; updatePagesStrip(); return; }
+  pages.push({ dataUrl: processedDataUrl, original: originalImage, name: 'Pág. '+(pages.length+1) });
+  updatePagesStrip();
+}
+
+function addPage() {
+  if (!originalImage) return;
+  pages.push({ dataUrl: processedDataUrl, original: originalImage, name: 'Pág. '+(pages.length+1) });
+  updatePagesStrip();
+  document.getElementById('fileInput').click();
+}
+
+function deletePage(i) {
+  pages.splice(i, 1);
+  pages.forEach((p,j) => p.name = 'Pág. '+(j+1));
+  updatePagesStrip();
+}
+
+function updatePagesStrip() {
+  const strip = document.getElementById('pagesStrip');
+  const card = document.getElementById('pagesCard');
+  const count = document.getElementById('pageCount');
+  count.textContent = pages.length;
+  card.style.display = pages.length > 0 ? 'block' : 'none';
+  strip.innerHTML = pages.map((p,i) => `
+    <div class="page-thumb">
+      <img src="${p.dataUrl}" alt="${p.name}">
+      <div class="page-num">${i+1}</div>
+      <div class="page-del" onclick="deletePage(${i})"><i class="ti ti-x"></i></div>
+    </div>`).join('');
+  document.getElementById('exportPageCount').textContent = pages.length;
+}
+
+function saveAdjustAndGoOCR() {
+  if (pages.length > 0) {
+    pages[pages.length-1].dataUrl = processedDataUrl;
+    updatePagesStrip();
+  }
+  showTab('ocr');
+}
+
+// ── OCR ────────────────────────────────────────────────────
+async function runOCR() {
+  if (!processedDataUrl) { alert('Primero escanea un documento.'); return; }
+  const badge = document.getElementById('ocrBadge');
+  const output = document.getElementById('ocrOutput');
+  badge.textContent = 'ANALIZANDO...'; badge.className = 'ocr-status analyzing';
+  output.textContent = '';
+  const base64 = processedDataUrl.split(',')[1];
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: 'Extrae todo el texto visible en esta imagen de documento. Devuelve SOLO el texto extraído, sin explicaciones, manteniendo el formato original con saltos de línea. Si no hay texto legible, escribe: [No se detectó texto legible]' }
+        ]}]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.map(b => b.text||'').join('') || '[Sin resultado]';
+    output.textContent = text;
+    badge.textContent = '✓ LISTO'; badge.className = 'ocr-status';
+  } catch(e) {
+    output.textContent = '[Error al conectar]';
+    badge.textContent = 'ERROR'; badge.className = 'ocr-status error';
+  }
+}
+
+function copyText() {
+  const t = document.getElementById('ocrOutput').textContent;
+  if (!t || t === 'El texto del documento aparecerá aquí.') { alert('Primero extrae el texto.'); return; }
+  navigator.clipboard.writeText(t).then(() => {
+    const s = document.getElementById('ocrStatus');
+    s.textContent = '✓ Copiado'; s.className = 'status-msg ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'status-msg'; }, 2500);
+  });
+}
+
+// ── QUALITY ────────────────────────────────────────────────
+function setQuality(q) {
+  quality = q==='low'?0.5:q==='high'?0.97:0.8;
+  ['Low','Med','High'].forEach(x => document.getElementById('q'+x)?.classList.toggle('active', x.toLowerCase()===q));
+}
+
+// ── EXPORT ─────────────────────────────────────────────────
+function exportPDF() {
+  const sources = pages.length > 0 ? pages.map(p=>p.dataUrl) : (processedDataUrl ? [processedDataUrl] : null);
+  if (!sources) { alert('Primero escanea un documento.'); return; }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  let done = 0;
+  sources.forEach((src, idx) => {
+    const img = new Image();
+    img.onload = () => {
+      if (idx > 0) pdf.addPage();
+      const pw=190, ph=277;
+      const ratio = Math.min(pw/img.width, ph/img.height);
+      const w=img.width*ratio, h=img.height*ratio;
+      pdf.addImage(src, 'JPEG', (210-w)/2, (297-h)/2, w, h, undefined, 'FAST');
+      if (++done === sources.length) {
+        const name = document.getElementById('fileName').value || 'documento';
+        pdf.save(name+'.pdf');
+        saveToHistory(name, sources[0]);
+        showExportStatus('✓ PDF descargado ('+sources.length+' pág.)');
+      }
+    };
+    img.src = src;
+  });
+}
+
+function exportImg() {
+  if (!processedDataUrl) { alert('Primero escanea un documento.'); return; }
+  const a = document.createElement('a');
+  const name = document.getElementById('fileName').value || 'documento';
+  a.href = processedDataUrl; a.download = name+'.jpg'; a.click();
+  showExportStatus('✓ Imagen descargada');
+}
+
+function shareWhatsApp() {
+  const text = document.getElementById('ocrOutput').textContent;
+  const hasText = text && text !== 'El texto del documento aparecerá aquí.' && !text.startsWith('[');
+  const name = document.getElementById('fileName').value || 'documento';
+  if (hasText) {
+    const msg = encodeURIComponent('📄 *'+name+'*\n\n'+text);
+    window.open('https://wa.me/?text='+msg, '_blank');
+  } else {
+    alert('Extrae el texto con OCR primero para compartir el contenido por WhatsApp.\n\nPara compartir el PDF como archivo, descárgalo y envíalo desde WhatsApp.');
+  }
+}
+
+function showExportStatus(msg) {
+  const s = document.getElementById('exportStatus');
+  s.textContent = msg; s.className = 'status-msg ok';
+  setTimeout(() => { s.textContent=''; s.className='status-msg'; }, 3500);
+}
+
+// ── HISTORY ────────────────────────────────────────────────
+function saveToHistory(name, thumb) {
+  const hist = getHistory();
+  hist.unshift({ name, thumb, date: new Date().toLocaleDateString('es-ES'), ts: Date.now() });
+  if (hist.length > 20) hist.pop();
+  try { localStorage.setItem('docscanner_hist', JSON.stringify(hist.map(h=>({...h,thumb:h.thumb.substring(0,200)})))); } catch(e){}
+  renderHistory();
+}
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem('docscanner_hist')||'[]'); } catch(e){ return []; }
+}
+
+function renderHistory() {
+  const hist = getHistory();
+  const el = document.getElementById('histList');
+  if (!hist.length) { el.innerHTML='<div class="hist-empty"><i class="ti ti-clock-off"></i>Sin documentos guardados</div>'; return; }
+  el.innerHTML = hist.map((h,i)=>`
+    <div class="hist-item" style="margin-bottom:8px">
+      <div class="hist-thumb" style="background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--accent2)"><i class="ti ti-file" style="font-size:20px"></i></div>
+      <div class="hist-info">
+        <div class="hist-name">${h.name}.pdf</div>
+        <div class="hist-meta">${h.date}</div>
+      </div>
+      <div class="hist-del" onclick="deleteHistItem(${i})"><i class="ti ti-trash"></i></div>
+    </div>`).join('');
+}
+
+function deleteHistItem(i) {
+  const hist = getHistory();
+  hist.splice(i,1);
+  try { localStorage.setItem('docscanner_hist', JSON.stringify(hist)); } catch(e){}
+  renderHistory();
+}
+
+function clearHistory() {
+  if (confirm('¿Borrar todo el historial?')) {
+    try { localStorage.removeItem('docscanner_hist'); } catch(e){}
+    renderHistory();
+  }
+}
+
+// ── TABS ───────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  const idx = ['scan','adjust','ocr','export','history'].indexOf(id);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  if (id==='adjust'||id==='export') syncPreviews();
+  if (id==='history') renderHistory();
+}
+
+// ── INIT ───────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+renderHistory();
+</script>
+</body>
+</html>
